@@ -21,11 +21,8 @@ def stopwords(tokens, language='english', cache=here('cache')):
         return " ".join(filtered)
     except LookupError:
         # Download the data if needed
-        nltk.downloader.download('stopwords', download_dir=cache)
-        if is_self_exe():
-            exit("Corpus installed. Please run this command again.")
-        else:
-            return stopwords(tokens, language, cache)
+        nltk.downloader.download('stopwords', download_dir=cache, quiet=True, force=True)
+        return stopwords(tokens, language, cache)
 
 def slugify(tokens):
     # Remove specialchars

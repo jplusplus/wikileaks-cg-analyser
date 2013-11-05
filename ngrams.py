@@ -3,11 +3,13 @@ import argparse
 
 def ngrams(input='', n_min=0, n_max=5):
     input = input.split(' ')
-    output = []
+    output = {}
     end = n_max
     for n in range(n_min+1, end+n_min+1):
         for i in range(len(input)-n+1):
-            output.append(input[i:i+n])
+            token = " ".join(input[i:i+n])
+            # Count the ngram
+            output[token] = output.get(token, 0) + 1
     return output
 
 def main(tokens='', n_min=0, n_max=5):
