@@ -10,11 +10,17 @@ here = lambda x: os.path.join(os.path.abspath(os.path.dirname(__file__)), x)
 is_self_exe = lambda: __name__ == "__main__"
 
 def stopwords(tokens, language='english', cache=here('cache')):
+    # Add cache direcotry to the nltk paths
+    if cache: nltk.data.path.append(cache)
     # Removes stop words
     try:
+        # Get words to remove in the given language
         s = set( nltk.corpus.stopwords.words(language) )
-        return filter( lambda w: not w.lower() in s, tokens.split() )
+        # Removes those words
+        filtered = filter( lambda w: not w.lower() in s, tokens.split() )
+        return " ".join(filtered)
     except LookupError:
+        # Download the data if needed
         nltk.downloader.download('stopwords', download_dir=cache)
         if is_self_exe():
             exit("Corpus installed. Please run this command again.")
