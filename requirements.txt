@@ -1,0 +1,3 @@
+psycopg2==2.5.1
+geonamescache==0.10
+nltk==2.0.4
