@@ -17,6 +17,8 @@ def get_cable(idx, field=None):
 
 def get_analyse(idx):
     cable = get_cable(idx=idx)
+    # Unkown cable id
+    if not cable: return "Cable %s dosen't exist!" % idx
     # Clean the data
     content = cable.get("content")
     content = cleaner.slugify(content)
@@ -36,7 +38,36 @@ def get_analyse(idx):
         """, values)
     # Commit the request
     conn.commit()
-    return "%s ngram(s) collected" % len(records)
+    return "%s ngram(s) collected from cable %s." % (len(records), idx)
+
+def get_bash_analyse(frm, to, verbose=True):
+    conn = get_connexion()
+    cur  = conn.cursor(cursor_factory=DictCursor)
+    cur.execute("SELECT * FROM cable WHERE id >= %s AND id <= %s ORDER BY id", (frm,to) )
+    cables = cur.fetchall()
+    for cable in cables:
+        if verbose: print "Analysing cable %s..." % cable['id']
+        # Avoid duplicate ngram
+        cur.execute("DELETE FROM cable_ngram WHERE cable = %s", (cable['id'],) )
+        # Clean the data
+        content = cable.get("content")
+        content = cleaner.slugify(content)
+        content = cleaner.stopwords(content)
+        # get the ngrams
+        records = ngrams(content)
+        # Record ngrams, start transaction
+        for token, count in records.iteritems():
+            values = (cable['id'], token, count, cable['date'])
+            cur.execute("""INSERT INTO cable_ngram
+                (cable, ngram, count, created_at)
+                VALUES(%s, %s, %s, %s)
+            """, values)
+    # Commit the request
+    conn.commit()
+    return "%s cable(s) analysed." % (len(cables),)
+
+
+
 
 
 def get_install(force=False, halt_on_error=True):
@@ -75,11 +106,20 @@ def main():
     # ----
     # 'analyse' sub-command
     # ----
-    analyse = subparsers.add_parser('analyse', help="Extract ngram from a cable.")
+    analyse = subparsers.add_parser('analyse', help="Extract ngrams from a cable.")
     # Function  that interprets this sub-command
     analyse.set_defaults(func=get_analyse)
     # Command arguments
     analyse.add_argument('idx', type=int, help="Id of the cable to analyse.")
+    # ----
+    # 'bash-analyse' sub-command
+    # ----
+    bashanalyse = subparsers.add_parser('bash-analyse', help="Extract ngrams from a range of cables.")
+    # Function  that interprets this sub-command
+    bashanalyse.set_defaults(func=get_bash_analyse)
+    # Command arguments
+    bashanalyse.add_argument('--from', dest='frm', required=True, type=int, help="Id of the first cable to analyse.")
+    bashanalyse.add_argument('--to', dest='to', required=True, type=int, help="Id of the last cable to analyse.")
     # ----
     # 'install' sub-command
     # ----

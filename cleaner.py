@@ -26,7 +26,7 @@ def stopwords(tokens, language='english', cache=here('cache')):
 
 def slugify(tokens):
     # Remove specialchars
-    tokens = unicodedata.normalize('NFKD', unicode(tokens))
+    tokens = unicodedata.normalize('NFKD', unicode(tokens) )
     tokens = tokens.encode('ascii', 'ignore')
     tokens = re.sub(r'[^a-zA-Z]+', ' ', tokens).strip('-')
     tokens = re.sub(r'[-]+', ' ', tokens)
