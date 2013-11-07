@@ -35,7 +35,7 @@ def get_analyse(idx):
     # Unkown cable id
     if not cable: return "Cable %s dosen't exist!" % idx
     analyse_cable(cable, conn)
-    return "cable  %s analysed (%ss)." % (idx, round(time.time() - start_time, 3))
+    return "cable %s analysed (%ss)." % (idx, round(time.time() - start_time, 3))
 
 def get_bash_analyse(frm, to, verbose=True):
     conn = get_connexion()
@@ -59,7 +59,7 @@ def analyse_cable(cable, conn):
     # get the ngrams
     records   = ngrams(content, n_max=3)
     cities    = geo.get_cities(content)
-    countries = geo.get_cities(content)
+    countries = geo.get_countries(content)
     cur  = conn.cursor(cursor_factory=DictCursor)
     # Record ngrams, start transaction
     ngram_rows  = []
@@ -74,7 +74,7 @@ def analyse_cable(cable, conn):
         location_rows.append(row)
     # Collect countries to insert
     for country in countries:
-        row = (idx, country["name"], "COUNTRY", country["countrycode"], None, None, cable['date'])
+        row = (idx, country["name"].upper(), "COUNTRY", country["countrycode"], None, None, cable['date'])
         location_rows.append(row)
     try:
         cur.executemany(NGRAM_INSERT, ngram_rows)
