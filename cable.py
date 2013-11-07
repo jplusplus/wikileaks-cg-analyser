@@ -4,8 +4,20 @@ from ngrams          import ngrams
 from psycopg2.extras import DictCursor
 import argparse
 import cleaner
+import geo
 import psycopg2
 import time
+
+
+NGRAM_INSERT = """INSERT INTO cable_ngram
+    (cable, ngram, count, created_at)
+    VALUES(%s, %s, %s, %s)
+"""
+
+LOCATION_INSERT = """INSERT INTO cable_location
+    (cable, location, type, country, lat, lon, created_at)
+    VALUES(%s, %s, %s, %s, %s, %s, %s)
+"""
 
 def get_cable(idx, field=None):
     conn = get_connexion()
@@ -17,83 +29,105 @@ def get_cable(idx, field=None):
         return cur.fetchone().get(field)
 
 def get_analyse(idx):
+    conn  = get_connexion()
     cable = get_cable(idx=idx)
     start_time = time.time()
     # Unkown cable id
     if not cable: return "Cable %s dosen't exist!" % idx
-    # Clean the data
-    content = cable.get("content").upper()
-    content = cleaner.slugify(content)
-    content = cleaner.stopwords(content)
-    # get the ngrams
-    records = ngrams(content, n_max=3)
-    # Establish connexion
-    conn = get_connexion()
-    cur  = conn.cursor(cursor_factory=DictCursor)
-    rows = []
-    # Record ngrams, start transaction
-    for token, count in records.iteritems():
-        row = (idx, token, count, cable['date'])
-        rows.append(row)
-    try:
-        cur.executemany("""INSERT INTO cable_ngram
-            (cable, ngram, count, created_at)
-            VALUES(%s, %s, %s, %s)
-        """, rows)
-    except psycopg2.IntegrityError:
-        # Ingnore the integrity error
-        conn.rollback()
-    # Commit the request
-    conn.commit()
-    return "%s ngram(s) collected from cable %s (%ss)." % (len(records), idx, round(time.time() - start_time, 3))
+    analyse_cable(cable, conn)
+    return "cable  %s analysed (%ss)." % (idx, round(time.time() - start_time, 3))
 
 def get_bash_analyse(frm, to, verbose=True):
     conn = get_connexion()
     cur  = conn.cursor(cursor_factory=DictCursor)
     cur.execute("SELECT * FROM cable WHERE id >= %s AND id <= %s ORDER BY id", (frm,to) )
     cables = cur.fetchall()
-    # Commit every 100 rows
-    next_commit = COMMIT_INTERVAL = 100
     for cable in cables:
         start_time = time.time()
-        # Clean the data
-        content = cable.get("content")
-        content = cleaner.slugify(content)
-        content = cleaner.stopwords(content)
-        # get the ngrams
-        records = ngrams(content, n_max=3)
-        rows = []
-        # Record ngrams, start transaction
-        for token, count in records.iteritems():
-            row = (cable['id'], token, count, cable['date'])
-            rows.append(row)
-        try:
-            cur.executemany("""INSERT INTO cable_ngram
-                (cable, ngram, count, created_at)
-                VALUES(%s, %s, %s, %s)
-            """, rows)
-            # Iterate througth the next commit
-            next_commit -= 1
-            # It's time to commit!
-            if next_commit == 0:
-                next_commit = COMMIT_INTERVAL
-                conn.commit()
-        except psycopg2.IntegrityError:
-            # Ingnore the integrity error
-            conn.rollback()
+        analyse_cable(cable, conn)
         if verbose: print "Cable %s analysed (%ss)..." % (cable['id'], round(time.time() - start_time, 3))
-    # Commit the request
-    conn.commit()
     return "%s cable(s) analysed." % (len(cables),)
 
 
-def get_install(force=False, halt_on_error=True):
+def analyse_cable(cable, conn):
+    global NGRAM_INSERT, LOCATION_INSERT
+    idx     = cable["id"]
+    # Clean the data
+    content = cable.get("content")
+    content = cleaner.slugify(content)
+    content = cleaner.stopwords(content)
+    # get the ngrams
+    records   = ngrams(content, n_max=3)
+    cities    = geo.get_cities(content)
+    countries = geo.get_cities(content)
+    cur  = conn.cursor(cursor_factory=DictCursor)
+    # Record ngrams, start transaction
+    ngram_rows  = []
+    for token, count in records.iteritems():
+        row = (idx, token, count, cable['date'])
+        ngram_rows.append(row)
+    # Record geo location
+    location_rows  = []
+    # Collect city to insert
+    for city in cities:
+        row = (idx, city["name"].upper(), "CITY", city["countrycode"], city["latitude"], city["longitude"], cable['date'])
+        location_rows.append(row)
+    # Collect countries to insert
+    for country in countries:
+        row = (idx, country["name"], "COUNTRY", country["countrycode"], None, None, cable['date'])
+        location_rows.append(row)
+    try:
+        cur.executemany(NGRAM_INSERT, ngram_rows)
+        cur.executemany(LOCATION_INSERT, location_rows)
+        conn.commit()
+    except psycopg2.IntegrityError:
+        # Ingnore the integrity error
+        conn.rollback()
+    return cable
+
+
+def get_install(force=False, halt_on_error=True, table='all'):
+    if table == 'all':
+        install_location(force, halt_on_error)
+        install_ngram(force, halt_on_error)
+    elif table == 'location':
+        install_location(force, halt_on_error)
+    elif table == 'ngram':
+        install_ngram(force, halt_on_error)
+
+def install_location(force=False, halt_on_error=True):
     conn = get_connexion()
     cur  = conn.cursor()
     try:
         # Force new table creating by removing the existing one
-        if force: cur.execute("""DROP TABLE cable_ngram""")
-        # Create the new table
+        if force:
+            cur.execute("""DROP TABLE cable_location""")
+        cur.execute("""CREATE TABLE cable_location(
+            cable      INTEGER,
+            location   VARCHAR(255),
+            type       VARCHAR(25),
+            country    VARCHAR(25),
+            lat        VARCHAR(15),
+            lon        VARCHAR(15),
+            created_at DATE,
+            FOREIGN KEY (cable) REFERENCES cable(id),
+            UNIQUE (cable, location, type)
+        )""")
+        # Commit actions
+        conn.commit()
+    except psycopg2.ProgrammingError as e:
+        if halt_on_error: exit("Unable to create the table: %s" % e)
+        else: pass
+    print "Table ̀`cable_location` created."
+
+def install_ngram(force=False, halt_on_error=True):
+    conn = get_connexion()
+    cur  = conn.cursor()
+    try:
+        # Force new table creating by removing the existing one
+        if force:
+            cur.execute("""DROP TABLE cable_ngram""")
+        # Create the new tables
         cur.execute("""CREATE TABLE cable_ngram(
             cable      INTEGER,
             ngram      TEXT,
@@ -107,7 +141,7 @@ def get_install(force=False, halt_on_error=True):
     except psycopg2.ProgrammingError as e:
         if halt_on_error: exit("Unable to create the table: %s" % e)
         else: pass
-    return "Table ̀`cable_ngram` created."
+    print "Table ̀`cable_ngram` created."
 
 def main():
     parser     = argparse.ArgumentParser()
@@ -145,6 +179,7 @@ def main():
     # Command arguments
     install.add_argument('--force', dest="force", help="Force a new table creation.", action='store_true')
     install.add_argument('--no-force', dest="force", help="Do not force a new table creation.", action='store_false')
+    install.add_argument('--table', dest='table', default='all', type=str, help="Table to setup (all, location, ngram).")
     # Function  that interprets this sub-command
     install.set_defaults(func=get_install)
     # ----

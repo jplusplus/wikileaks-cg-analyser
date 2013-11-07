@@ -8,7 +8,9 @@ import urlparse
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODE)
 psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY)
 
-def get_connexion():
+def get_connexion(renew=False):
+    # Singleton
+    if not renew and hasattr(get_connexion, "conn"): return get_connexion.conn
     result = urlparse.urlparse( os.getenv('DATABASE_URL', '') )
     # Extract field from url parsing
     username = getattr(result, "username", "postgres")
@@ -16,10 +18,12 @@ def get_connexion():
     hostname = getattr(result, "hostname", "localhost")
     database = getattr(result, "path")[1:]
 
-    return psycopg2.connect(
+    get_connexion.conn = psycopg2.connect(
         database = database,
         user     = username,
         password = password,
         host     = hostname
     )
+
+    return get_connexion.conn
 

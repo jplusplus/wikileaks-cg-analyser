@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import argparse
 import json
 import os
 # for relative paths
@@ -48,4 +49,32 @@ def get_entities_from_list(content, lst):
     # Transform entity set in list of dict
     return [ lst[key] for key in mentions ]
 
-print get_countries(u"Test: lonDRes est une très belle ville comparé à Berlin pour une ville dans le Andorra.")
+def main():
+    parser     = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers()
+    # ----
+    # 'city' sub-command
+    # ----
+    cityparser  = subparsers.add_parser('city', help="Extract cities from content.")
+    # Function  that interprets this sub-command
+    cityparser.set_defaults(func=get_cities)
+    # Command arguments
+    cityparser.add_argument('content', type=str, help="Content to analyse.")
+    # ----
+    # 'analyse' sub-command
+    # ----
+    countryparser = subparsers.add_parser('country', help="Extract countries from content.")
+    # Function  that interprets this sub-command
+    countryparser.set_defaults(func=get_countries)
+    # Command arguments
+    countryparser.add_argument('content', type=str, help="Content to analyse.")
+    # ----
+    # Parse arguments
+    args = parser.parse_args()
+    # Remove function from args
+    func = args.func
+    del args.func
+    # Get the cable and print the output
+    print func(**vars(args))
+
+if __name__ == "__main__": main()
