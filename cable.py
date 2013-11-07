@@ -5,6 +5,7 @@ from psycopg2.extras import DictCursor
 import argparse
 import cleaner
 import psycopg2
+import time
 
 def get_cable(idx, field=None):
     conn = get_connexion()
@@ -17,57 +18,73 @@ def get_cable(idx, field=None):
 
 def get_analyse(idx):
     cable = get_cable(idx=idx)
+    start_time = time.time()
     # Unkown cable id
     if not cable: return "Cable %s dosen't exist!" % idx
     # Clean the data
-    content = cable.get("content")
+    content = cable.get("content").upper()
     content = cleaner.slugify(content)
     content = cleaner.stopwords(content)
     # get the ngrams
-    records = ngrams(content)
+    records = ngrams(content, n_max=3)
     # Establish connexion
     conn = get_connexion()
     cur  = conn.cursor(cursor_factory=DictCursor)
-    cur.execute("DELETE FROM cable_ngram WHERE cable = %s", (idx,) )
+    rows = []
     # Record ngrams, start transaction
     for token, count in records.iteritems():
-        values = (idx, token, count, cable['date'])
-        cur.execute("""INSERT INTO cable_ngram
+        row = (idx, token, count, cable['date'])
+        rows.append(row)
+    try:
+        cur.executemany("""INSERT INTO cable_ngram
             (cable, ngram, count, created_at)
             VALUES(%s, %s, %s, %s)
-        """, values)
+        """, rows)
+    except psycopg2.IntegrityError:
+        # Ingnore the integrity error
+        conn.rollback()
     # Commit the request
     conn.commit()
-    return "%s ngram(s) collected from cable %s." % (len(records), idx)
+    return "%s ngram(s) collected from cable %s (%ss)." % (len(records), idx, round(time.time() - start_time, 3))
 
 def get_bash_analyse(frm, to, verbose=True):
     conn = get_connexion()
     cur  = conn.cursor(cursor_factory=DictCursor)
     cur.execute("SELECT * FROM cable WHERE id >= %s AND id <= %s ORDER BY id", (frm,to) )
     cables = cur.fetchall()
+    # Commit every 100 rows
+    next_commit = COMMIT_INTERVAL = 100
     for cable in cables:
-        if verbose: print "Analysing cable %s..." % cable['id']
-        # Avoid duplicate ngram
-        cur.execute("DELETE FROM cable_ngram WHERE cable = %s", (cable['id'],) )
+        start_time = time.time()
         # Clean the data
         content = cable.get("content")
         content = cleaner.slugify(content)
         content = cleaner.stopwords(content)
         # get the ngrams
-        records = ngrams(content)
+        records = ngrams(content, n_max=3)
+        rows = []
         # Record ngrams, start transaction
         for token, count in records.iteritems():
-            values = (cable['id'], token, count, cable['date'])
-            cur.execute("""INSERT INTO cable_ngram
+            row = (cable['id'], token, count, cable['date'])
+            rows.append(row)
+        try:
+            cur.executemany("""INSERT INTO cable_ngram
                 (cable, ngram, count, created_at)
                 VALUES(%s, %s, %s, %s)
-            """, values)
+            """, rows)
+            # Iterate througth the next commit
+            next_commit -= 1
+            # It's time to commit!
+            if next_commit == 0:
+                next_commit = COMMIT_INTERVAL
+                conn.commit()
+        except psycopg2.IntegrityError:
+            # Ingnore the integrity error
+            conn.rollback()
+        if verbose: print "Cable %s analysed (%ss)..." % (cable['id'], round(time.time() - start_time, 3))
     # Commit the request
     conn.commit()
     return "%s cable(s) analysed." % (len(cables),)
-
-
-
 
 
 def get_install(force=False, halt_on_error=True):
@@ -82,7 +99,8 @@ def get_install(force=False, halt_on_error=True):
             ngram      TEXT,
             count      INTEGER,
             created_at DATE,
-            FOREIGN KEY (cable) REFERENCES cable(id)
+            FOREIGN KEY (cable) REFERENCES cable(id),
+            UNIQUE (cable, ngram)
         )""")
         # Commit actions
         conn.commit()

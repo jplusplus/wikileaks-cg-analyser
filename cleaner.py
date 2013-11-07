@@ -9,7 +9,7 @@ here = lambda x: os.path.join(os.path.abspath(os.path.dirname(__file__)), x)
 # is it a self execution?
 is_self_exe = lambda: __name__ == "__main__"
 
-def stopwords(tokens, language='english', cache=here('cache')):
+def stopwords(tokens, language='english', cache=here('cache'), remove_under=4):
     # Add cache direcotry to the nltk paths
     if cache: nltk.data.path.append(cache)
     # Removes stop words
@@ -18,6 +18,8 @@ def stopwords(tokens, language='english', cache=here('cache')):
         s = set( nltk.corpus.stopwords.words(language) )
         # Removes those words
         filtered = filter( lambda w: not w.lower() in s, tokens.split() )
+        # Removes tiny words
+        filtered = filter( lambda w: len(w) > remove_under, filtered)
         return " ".join(filtered)
     except LookupError:
         # Download the data if needed
