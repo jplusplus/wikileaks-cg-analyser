@@ -13,33 +13,39 @@ def load_data():
     city_file = open(city_path)
     data["cities"] = json.load(city_file)
     # Load countries
-    # country_path = here("data/countries.json")
-    # country_file = open(country_path)
-    # data["countries"] = json.load(country_file)
-
+    country_path = here("data/countries.json")
+    country_file = open(country_path)
+    data["countries"] = json.load(country_file)
 
 def get_cities(content):
+    global data
+    if data == {}: load_data()
+    return get_entities_from_list(content, data["cities"])
+
+def get_countries(content):
+    global data
+    if data == {}: load_data()
+    return get_entities_from_list(content, data["countries"])
+
+def get_entities_from_list(content, lst):
     global data
     mentions = set()
     # Same case comparaison
     content = content.upper()
-    # Look for each city
-    for key, city in enumerate(data["cities"]):
-        # Get all city aliases
-        aliases = city["alias"].upper().split(",")
-        # Add the city name as an alias
-        aliases.insert(0, city["name"].upper())
+    # Look for each entity
+    for key, entity in enumerate(lst):
+        # Get all entity aliases
+        aliases = entity["alias"].upper().split(",")
+        # Add the entity name as an alias
+        aliases.insert(0, entity["name"].upper())
         # Look for each alias
         for alias in aliases:
             # Clean the alias
             alias = alias.strip()
-            # City is mentioned
+            # entity is mentioned
             if len(alias) > 4 and content.find(alias) > -1:
                 mentions.add(key)
-    # Transform city set in list of dict
-    cities = [ data["cities"][key] for key in mentions ]
-    print cities
+    # Transform entity set in list of dict
+    return [ lst[key] for key in mentions ]
 
-
-load_data()
-get_cities(u"Test: lonDRes est une très belle ville comparé à Berlin.")
+print get_countries(u"Test: lonDRes est une très belle ville comparé à Berlin pour une ville dans le Andorra.")
