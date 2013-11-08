@@ -1,3 +1,4 @@
+VIRTUALENV = venv/
 # Makefile
 install:
 	virtualenv venv --no-site-packages --distribute
