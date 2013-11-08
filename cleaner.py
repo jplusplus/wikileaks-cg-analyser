@@ -50,6 +50,6 @@ def main():
     sw_args = vars(args)
     # Removes useless arguments
     del sw_args["slugify"]
-    print " ".join( stopwords(**sw_args) )
+    print "".join( stopwords(**sw_args) )
 
 if is_self_exe(): main()

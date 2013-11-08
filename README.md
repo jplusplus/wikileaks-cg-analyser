@@ -26,6 +26,12 @@ make install
 $ python ./cleaner.py
 usage: cleaner.py [-h] [-l LANGUAGE] [-c CACHE] [--slugify] [--no-slugify] tokens```
 ```
+#### Exemple
+Remove all `french` stopwords and slugify the string:
+```bash
+$ python ./cleaner.py -l french --slugify "Les sanglots longs des violons de l'automne blessent mon coeur d'une langueur monotone."
+sanglots longs violons automne blessent coeur langueur monotone
+```
 
 ### Ngrams extractor
 ```bash
