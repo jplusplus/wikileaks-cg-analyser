@@ -38,15 +38,22 @@ def get_analyse(idx):
     return "cable %s analysed (%ss)." % (idx, round(time.time() - start_time, 3))
 
 def get_bash_analyse(frm, to, verbose=True):
-    conn = get_connexion()
-    cur  = conn.cursor(cursor_factory=DictCursor)
-    cur.execute("SELECT * FROM cable WHERE id >= %s AND id <= %s ORDER BY id", (frm,to) )
-    cables = cur.fetchall()
-    for cable in cables:
-        start_time = time.time()
-        analyse_cable(cable, conn)
-        if verbose: print "Cable %s analysed (%ss)..." % (cable['id'], round(time.time() - start_time, 3))
-    return "%s cable(s) analysed." % (len(cables),)
+    PAGE_SIZE = 100
+    LAST_PAGE = (to - frm)/PAGE_SIZE
+    conn      = get_connexion()
+    cur       = conn.cursor(cursor_factory=DictCursor)
+    analysed  = 0
+    page      = 0
+    for page in range(0, LAST_PAGE):
+        offset = frm + (page * PAGE_SIZE)    
+        cur.execute("SELECT * FROM cable WHERE id >= %s AND id <= %s ORDER BY id LIMIT %s", (offset, to, PAGE_SIZE) )
+        cables = cur.fetchall()
+        analysed += len(cables)
+        for cable in cables:
+            start_time = time.time()
+            analyse_cable(cable, conn)
+            if verbose: print "Cable %s analysed (%ss)..." % (cable['id'], round(time.time() - start_time, 3))
+    return "%s cable(s) analysed." % analysed
 
 
 def analyse_cable(cable, conn):
